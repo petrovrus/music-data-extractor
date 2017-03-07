@@ -13,14 +13,24 @@ def extract_mfcc(audio, pool):
         pool.add('lowlevel.mfcc', mfcc_coeffs)
         pool.add('lowlevel.mfcc_bands', mfcc_bands)
 
+def extract_danceability(audio, pool):
+    dnc = Danceability(maxTau=8800, minTau=310)
+    danceability = dnc(audio)
+    pool.add('danceability', danceability)
+
 for trackName in os.listdir("Music"):
+    if ".mp3" not in trackName or ".sig" in trackName:
+        continue
     fullTrackName = "Music/" + trackName
     loader = essentia.standard.MonoLoader(filename=fullTrackName)
     audio = loader()
     pool = essentia.Pool()
-    extract_mfcc(audio, pool)
+    extract_danceability(audio, pool)
+    outTrackName = 'dance_' + trackName + '.json'
+    YamlOutput(filename=outTrackName)(pool)
+    """extract_mfcc(audio, pool)
     outTrackName = 'mfcc_' + trackName + '.sig'
     YamlOutput(filename=outTrackName)(pool)
     aggrPool = PoolAggregator(defaultStats = [ 'mean', 'var' ])(pool)
     YamlOutput(filename='mfccaggr_' + trackName + '.sig')(pool)
-
+    """
