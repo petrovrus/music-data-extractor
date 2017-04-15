@@ -1,54 +1,81 @@
+import essentia.streaming
 import essentia.standard
-from essentia.standard import *
+from essentia.streaming import *
+from essentia.standard import YamlOutput, PoolAggregator
 import os
 
-def extract_data(audio, pool):
-    window = Windowing(type = 'hann')
+frameSize = 2048
+hopSize = 1024
+sampleRate = 44100
+
+for trackName in os.listdir("music"):
+    if ".mp3" not in trackName or ".json" in trackName:
+        continue
+    fullTrackName = "music/" + trackName
+
+    #describe functions
+    loader = MonoLoader(filename=fullTrackName, sampleRate=sampleRate)
+    frameCutter = FrameCutter(frameSize=frameSize, hopSize=hopSize, lastFrameToEndOfFile=True, startFromZero=True)
+    spectralCentroidTime = SpectralCentroidTime()
+    window = Windowing(type='hann')
     spectrum = Spectrum(size=frameSize)
+    danceability = Danceability(maxTau=8800, minTau=310)
     mfcc = MFCC()
-    danceability = Danceability(maxTau=8800, minTau=310)(audio)
-    rhythm = PercivalBpmEstimator(sampleRate=sampleRate)(audio)
-    pool.add('bpm', rhythm)
-    pool.add('danceability', danceability)
-    for frame in FrameGenerator(audio, frameSize=frameSize, hopSize=hopSize, startFromZero=True):
-        centroid = SpectralCentroidTime()(spectrum(window(frame)))
-        zcr = ZeroCrossingRate()(frame)
-        energy = Energy()(spectrum(window(frame)))
-        loudness = Loudness()(frame)
-        mfcc_bands, mfcc_coeffs = mfcc(spectrum(window(frame)))
-        frequencies, magnitudes = SpectralPeaks()(spectrum(window(frame)))
-        pitch_class_profile = HPCP()(frequencies, magnitudes)
-        dissonance = Dissonance()(frequencies, magnitudes)
-        key, scale, strength, fst_to_scnd_rel_str = Key()(pitch_class_profile)
-        #chords = ChordsDetection()(pitch_class_profile)
+    hpcp = HPCP()
+    rhythm = PercivalBpmEstimator(sampleRate=sampleRate)
+    spectralPeaks = SpectralPeaks()
+    dissonance = Dissonance()
+    energy = Energy()
+    loudness = Loudness()
+    key = Key()
+    chords = ChordsDetection()
+    chordsDescription = ChordsDescriptors()
+    pool = essentia.Pool()
 
-        pool.add('centroid', centroid)
-        pool.add('zero-crossing rate', zcr)
-        pool.add('energy', energy)
+    #connect algorithms
+    loader.audio >> frameCutter.signal
+    loader.audio >> rhythm.signal
+    loader.audio >> danceability.signal
+    frameCutter.frame >> window.frame >> spectrum.frame
+    spectrum.spectrum >> energy.array
+    spectrum.spectrum >> loudness.signal
+    spectrum.spectrum >> spectralCentroidTime.array
+    spectrum.spectrum >> spectralPeaks.spectrum
+    spectralPeaks.magnitudes >> hpcp.magnitudes
+    spectralPeaks.frequencies >> hpcp.frequencies
+    spectralPeaks.magnitudes >> dissonance.magnitudes
+    spectralPeaks.frequencies >> dissonance.frequencies
+    hpcp.hpcp >> key.pcp
+    hpcp.hpcp >> chords.pcp
+    chords.chords >> chordsDescription.chords
+    chords.strength >> None
+    key.key >> chordsDescription.key
+    key.scale >> chordsDescription.scale
 
-        pool.add('loudness', loudness)
-        pool.add('dissonance', dissonance)
-        #pool.add('chords', chords)
-        pool.add('scale', scale)
+    danceability.danceability >> (pool, 'danceability')
+    energy.energy >> (pool, 'energy')
+    loudness.loudness >> (pool, 'loudness')
+    rhythm.bpm >> (pool, 'bpm')
+    spectralCentroidTime.centroid >> (pool, 'centroid')
+    dissonance.dissonance >> (pool, 'dissonance')
+    key.key >> (pool, 'key')
+    key.scale >> (pool, 'scale')
+    key.strength >> (pool, 'strength')
+    chordsDescription.chordsHistogram >> (pool, 'chords histogram')
+    chordsDescription.chordsNumberRate >> None
+    chordsDescription.chordsChangesRate >> None
+    chordsDescription.chordsKey >> None
+    chordsDescription.chordsScale >> None
+
+    #get the result
+    essentia.run(loader)
+    aggrPool = PoolAggregator(defaultStats=['mean', 'var'])(pool)
+    outTrackName = 'full_' + trackName + '.json'
+    YamlOutput(filename=outTrackName, format='json')(pool)
+    YamlOutput(filename='aggr_' + outTrackName, format='json')(aggrPool)
 
 """
 gaia transform:
 extract_genre()
 extract_mood()
 """
-
-frameSize = 2048
-hopSize = 1024
-sampleRate = 44100
-for trackName in os.listdir("music"):
-    if ".mp3" not in trackName or ".json" in trackName:
-        continue
-    fullTrackName = "music/" + trackName
-    loader = essentia.standard.MonoLoader(filename=fullTrackName, sampleRate=sampleRate)
-    audio = loader()
-    pool = essentia.Pool()
-    extract_data(audio, pool)
-    aggrPool = PoolAggregator(defaultStats=['mean', 'var'])(pool)
-    outTrackName = 'dance_' + trackName + '.json'
-    YamlOutput(filename=outTrackName, format='json')(pool)
-    YamlOutput(filename='aggr_' + outTrackName, format='json')(aggrPool)
