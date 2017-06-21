@@ -14,6 +14,8 @@ for trackName in os.listdir("music"):
     fullTrackName = "music/" + trackName
 
     #describe functions
+    metadataReader = essentia.standard.MetadataReader(filename=fullTrackName)
+
     loader = MonoLoader(filename=fullTrackName, sampleRate=sampleRate)
     frameCutter = FrameCutter(frameSize=frameSize, hopSize=hopSize, lastFrameToEndOfFile=True, startFromZero=True)
     spectralCentroidTime = SpectralCentroidTime()
@@ -28,9 +30,24 @@ for trackName in os.listdir("music"):
     energy = Energy()
     loudness = Loudness()
     key = Key()
+    """
     chords = ChordsDetection()
     chordsDescription = ChordsDescriptors()
+    """
+
     pool = essentia.Pool()
+    extensionLength = trackName.rfind('.')
+    # trackNameWithoutExtension = trackName[:extensionLength]
+    # print(trackNameWithoutExtension)
+    # pool.add("name", trackNameWithoutExtension)
+    id = trackName[:extensionLength]
+    name = metadataReader()[0]
+    artist = metadataReader()[1]
+    genre = metadataReader()[4]
+    pool.add("name", name)
+    pool.add("artist", artist)
+    pool.add("genre", genre)
+    pool.add("id", id)
 
     #connect algorithms
     loader.audio >> frameCutter.signal
@@ -46,11 +63,13 @@ for trackName in os.listdir("music"):
     spectralPeaks.magnitudes >> dissonance.magnitudes
     spectralPeaks.frequencies >> dissonance.frequencies
     hpcp.hpcp >> key.pcp
+    """
     hpcp.hpcp >> chords.pcp
     chords.chords >> chordsDescription.chords
     chords.strength >> None
     key.key >> chordsDescription.key
     key.scale >> chordsDescription.scale
+    """
 
     danceability.danceability >> (pool, 'danceability')
     energy.energy >> (pool, 'energy')
@@ -61,17 +80,19 @@ for trackName in os.listdir("music"):
     key.key >> (pool, 'key')
     key.scale >> (pool, 'scale')
     key.strength >> (pool, 'strength')
+    """
     chordsDescription.chordsHistogram >> (pool, 'chords histogram')
     chordsDescription.chordsNumberRate >> None
     chordsDescription.chordsChangesRate >> None
     chordsDescription.chordsKey >> None
     chordsDescription.chordsScale >> None
+    """
 
     #get the result
     essentia.run(loader)
     aggrPool = PoolAggregator(defaultStats=['mean', 'var'])(pool)
-    outTrackName = 'full_' + trackName + '.json'
-    YamlOutput(filename=outTrackName, format='json')(pool)
+    outTrackName = trackName + '.json'
+    #YamlOutput(filename='full_' + outTrackName, format='json')(pool)
     YamlOutput(filename='aggr_' + outTrackName, format='json')(aggrPool)
 
 """
