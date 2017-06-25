@@ -8,11 +8,11 @@ frameSize = 2048
 hopSize = 1024
 sampleRate = 44100
 
-for trackName in os.listdir("music"):
+for trackName in os.listdir("music3"):
     if ".mp3" not in trackName or ".json" in trackName:
         continue
-    fullTrackName = "music/" + trackName
-
+    fullTrackName = "music3/" + trackName
+    print(trackName)
     #describe functions
     metadataReader = essentia.standard.MetadataReader(filename=fullTrackName)
 
